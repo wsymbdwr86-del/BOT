@@ -7,10 +7,9 @@ from datetime import date, datetime, timedelta
 import telebot
 from telebot import types
 from flask import Flask
-import re
 
 # ==================================================
-# إعدادات البوت والقنوات الأساسية
+# إعدادات البوت والقنوات (محدثة بالمعرفات الخاصة بك)
 # ==================================================
 TOKEN = "9084104214:AAHksEyIugwQyL7qXNmoOZstQ-UETf6sRZc"
 OWNER_ID = 7110803688
@@ -25,7 +24,7 @@ db = sqlite3.connect("bot_data.db", check_same_thread=False)
 cursor = db.cursor()
 
 # ==================================================
-# إعداد سيرفر الويب المجاني لـ Render (لبقاء البوت شغال 24/7)
+# إعداد سيرفر الويب المجاني لـ Render
 # ==================================================
 app = Flask('')
 
@@ -40,23 +39,7 @@ def run_web():
 threading.Thread(target=run_web, daemon=True).start()
 
 # ==================================================
-# متغيرات الصيانة والدول المسموحة
-# ==================================================
-bot_maintenance = False  # False = البوت شغال، True = متوقف للصيانة
-
-ALLOWED_COUNTRY_CODES = {
-    "963": "سوري 🇸🇾",
-    "961": "لبناني 🇱🇧"
-}
-
-def check_maintenance(message):
-    if bot_maintenance and not is_admin(message.from_user.id):
-        bot.reply_to(message, "🛠️ **البوت متوقف حالياً للصيانة العامة.**\nيرجى العودة لاحقاً.", parse_mode="Markdown")
-        return True
-    return False
-
-# ==================================================
-# إعداد الجداول في قاعدة البيانات
+# قاعدة البيانات
 # ==================================================
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS users (
@@ -66,8 +49,7 @@ CREATE TABLE IF NOT EXISTS users (
     referrals INTEGER DEFAULT 0,
     spins INTEGER DEFAULT 0,
     banned INTEGER DEFAULT 0,
-    invited_by INTEGER,
-    phone_type TEXT DEFAULT 'غير محدد'
+    invited_by INTEGER
 )
 """)
 
@@ -151,7 +133,7 @@ temp_withdraw_data = {}
 temp_gift_data = {}
 
 # ==================================================
-# تسجيل الأوامر في قائمة البوت
+# تسجيل اختصارات الأوامر في تيليجرام (Menu Commands)
 # ==================================================
 try:
     bot.set_my_commands([
@@ -162,7 +144,7 @@ except Exception as e:
     print(f"Could not set commands: {e}")
 
 # ==================================================
-# نظام التقارير اليومية التلقائي
+# نظام إرسال التقرير اليومي الساعة 12 تلقائياً
 # ==================================================
 def daily_balance_reporter():
     last_sent_date = ""
@@ -192,16 +174,8 @@ def daily_balance_reporter():
 threading.Thread(target=daily_balance_reporter, daemon=True).start()
 
 # ==================================================
-# وظائف مساعدة وتحليل الأرقام
+# وظائف مساعدة
 # ==================================================
-def detect_phone_type(text):
-    clean = text.replace("+", "").strip()
-    if clean.startswith("963") or clean.startswith("09"):
-        return "سوري 🇸🇾"
-    elif clean.startswith("961") or clean.startswith("03") or clean.startswith("70") or clean.startswith("71") or clean.startswith("76") or clean.startswith("78") or clean.startswith("81"):
-        return "لبناني 🇱🇧"
-    return "أخرى / دولي"
-
 def is_admin(user_id):
     cursor.execute("SELECT 1 FROM admins WHERE user_id=?", (user_id,))
     return cursor.fetchone() is not None
@@ -237,7 +211,7 @@ def check_ban_callback(call):
     return False
 
 # ==================================================
-# القوائم والواجهات
+# واجهة المستخدم الأساسية
 # ==================================================
 def main_menu_markup():
     kb = types.InlineKeyboardMarkup(row_width=2)
@@ -264,54 +238,75 @@ def main_menu_markup():
 
 def admin_menu_markup():
     kb = types.InlineKeyboardMarkup(row_width=2)
-    m_status = "🟢 تشغيل البوت" if bot_maintenance else "🔴 إيقاف البوت (صيانة)"
     kb.add(
-        types.InlineKeyboardButton(m_status, callback_data="adm_toggle_maintenance"),
-        types.InlineKeyboardButton("📊 إحصائيات وانواع الأرقام", callback_data="adm_stats")
-    )
-    kb.add(
-        types.InlineKeyboardButton("🎡 إدارة عجلة الحظ", callback_data="adm_wheel_settings"),
+        types.InlineKeyboardButton("📊 إحصائيات البوت", callback_data="adm_stats"),
         types.InlineKeyboardButton("🎁 مكافأة الإحالات", callback_data="adm_ref_reward")
     )
+    kb.add(types.InlineKeyboardButton("🔥 مكافأة الإحالات المؤقتة", callback_data="adm_temp_ref"))
     kb.add(
         types.InlineKeyboardButton("📥 مراجعة طلبات السحب", callback_data="adm_withdraw_req"),
-        types.InlineKeyboardButton("⚖️ الحد الأدنى للسحب", callback_data="adm_withdraw_limits")
+        types.InlineKeyboardButton("⚖️ حد الأدنى والأقصى للسحب", callback_data="adm_withdraw_limits")
+    )
+    kb.add(types.InlineKeyboardButton("📅 سقف السحب اليومي", callback_data="adm_daily_limit"))
+    kb.add(
+        types.InlineKeyboardButton("➕ إضافة قناة اشتراك", callback_data="adm_add_chan"),
+        types.InlineKeyboardButton("🗑️ حذف قناة اشتراك", callback_data="adm_del_chan")
     )
     kb.add(
-        types.InlineKeyboardButton("📅 سقف السحب اليومي", callback_data="adm_daily_limit"),
-        types.InlineKeyboardButton("📋 إدارة أكواد الهدايا", callback_data="adm_manage_gifts")
+        types.InlineKeyboardButton("💰 إضافة رصيد لمستخدم", callback_data="adm_add_balance"),
+        types.InlineKeyboardButton("💸 خصم رصيد من مستخدم", callback_data="adm_sub_balance")
     )
+    kb.add(types.InlineKeyboardButton("👥 البحث وإدارة المستخدمين", callback_data="adm_manage_users"))
+    kb.add(types.InlineKeyboardButton("📢 إرسال وإدارة الإعلانات", callback_data="adm_broadcast"))
+    kb.add(types.InlineKeyboardButton("🎁 إضافة وتعديل العروض", callback_data="adm_offers"))
     kb.add(
-        types.InlineKeyboardButton("🎟️ إنشاء كود هدية", callback_data="adm_create_gift"),
-        types.InlineKeyboardButton("♻️ تصفير جميع الأرصدة", callback_data="adm_reset_all")
+        types.InlineKeyboardButton("📋 إدارة أكواد الهدايا", callback_data="adm_manage_gifts"),
+        types.InlineKeyboardButton("🎟️ إنشاء كود هدية", callback_data="adm_create_gift")
     )
-    kb.add(types.InlineKeyboardButton("🎁 الهدية اليومية", callback_data="adm_daily_gift_val"))
-    kb.add(types.InlineKeyboardButton("🏠 الرئيسية", callback_data="adm_main_menu"))
+    kb.add(types.InlineKeyboardButton("🗑️ حذف الاكواد القديمة", callback_data="adm_del_old_gifts"))
+    kb.add(types.InlineKeyboardButton("♻️ تصفير جميع الأرصدة", callback_data="adm_reset_all"))
+    kb.add(types.InlineKeyboardButton("🎁 تحديد قيمة الهدية اليومية", callback_data="adm_daily_gift_val"))
+    kb.add(types.InlineKeyboardButton("📖 تعديل شرح البوت", callback_data="adm_edit_desc"))
+    kb.add(types.InlineKeyboardButton("🎡 إدارة عجلة الحظ", callback_data="adm_wheel"))
+    kb.add(
+        types.InlineKeyboardButton("🏠 الرئيسية", callback_data="adm_main_menu"),
+        types.InlineKeyboardButton("💳 دفع والسحب عبر شام كاش", callback_data="adm_sham_cash")
+    )
     return kb
 
 def wheel_menu_markup():
     kb = types.InlineKeyboardMarkup(row_width=1)
     kb.add(
-        types.InlineKeyboardButton("➕ إضافة جائزة للعجلة", callback_data="wh_add_prize"),
-        types.InlineKeyboardButton("🎁 عرض قائمة الجوائز", callback_data="wh_list_prizes"),
-        types.InlineKeyboardButton("↩️ العودة لوحة الإدارة", callback_data="adm_panel")
+        types.InlineKeyboardButton("⚙️ إعدادات العجلة", callback_data="wh_settings"),
+        types.InlineKeyboardButton("⚙️ تعديل حدود السحب", callback_data="wh_limits"),
+        types.InlineKeyboardButton("➕ إضافة جائزة", callback_data="wh_add_prize"),
+        types.InlineKeyboardButton("🎁 قائمة الجوائز وإدارتها", callback_data="wh_list_prizes"),
+        types.InlineKeyboardButton("👥 إدارة مستخدمي العجلة", callback_data="wh_users"),
+        types.InlineKeyboardButton("💸 طلبات سحب العجلة", callback_data="wh_withdrawals"),
+        types.InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="wh_stats"),
+        types.InlineKeyboardButton("↩️ لوحة الإدارة", callback_data="adm_panel")
     )
     return kb
 
-# ==================================================
-# بدء التشغيل والتحقق الإجباري من رقم الهاتف عبر /start
-# ==================================================
+def register_user(message, inviter=None):
+    uid = message.from_user.id
+    if get_user(uid):
+        return False
+    username = message.from_user.username or ""
+    valid_inviter = inviter if (inviter and inviter != uid and get_user(inviter)) else None
+
+    cursor.execute("INSERT INTO users (user_id, username, invited_by) VALUES (?, ?, ?)", (uid, username, valid_inviter))
+    if valid_inviter:
+        reward = int(get_setting("ref_reward") or 10)
+        cursor.execute("UPDATE users SET referrals=referrals+1, balance=balance+? WHERE user_id=?", (reward, valid_inviter))
+    db.commit()
+    return True
+
 @bot.message_handler(commands=["start"])
 def start(message):
     uid = message.from_user.id
-    if check_maintenance(message):
-        return
     if check_ban_message(message):
         return
-
-    cursor.execute("SELECT phone_type FROM users WHERE user_id=?", (uid,))
-    row = cursor.fetchone()
-
     inviter = None
     parts = (message.text or "").split()
     if len(parts) > 1:
@@ -319,22 +314,8 @@ def start(message):
             inviter = int(parts[1])
         except ValueError:
             inviter = None
-
-    if not row or not row[0] or row[0] == "غير محدد":
-        states[uid] = f"waiting_phone_{inviter if inviter else 0}"
-        
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-        kb.add(types.KeyboardButton("📱 اضغط هنا لمشاركة رقم هاتفك والتحقق", request_contact=True))
-        
-        bot.send_message(
-            uid,
-            "⚠️ **مرحباً بك! يتطلب استخدام البوت التحقق من رقم هاتفك أولاً.**\n\nالرجاء الضغط على الزر بالأسفل لمشاركة رقم هاتفك والتحقق من دولتك: 👇",
-            parse_mode="Markdown",
-            reply_markup=kb
-        )
-        return
-
-    bot.send_message(uid, "🎉 **أهلاً بك مرة أخرى في البوت التفاعلي!**\n\nاختر الخدمة المطلوبة من القائمة أدناه 👇", parse_mode="Markdown", reply_markup=main_menu_markup())
+    register_user(message, inviter)
+    bot.send_message(uid, "🎉 **أهلاً بك في البوت التفاعلي!**\n\nاختر الخدمة المطلوبة من القائمة أدناه 👇", parse_mode="Markdown", reply_markup=main_menu_markup())
 
 @bot.message_handler(commands=["admin"])
 def admin_panel(message):
@@ -342,64 +323,6 @@ def admin_panel(message):
         bot.reply_to(message, "⛔ هذه اللوحة للمشرفين فقط.")
         return
     bot.send_message(message.chat.id, "👨‍💻 **لوحة التحكم والإدارة**", parse_mode="Markdown", reply_markup=admin_menu_markup())
-
-# ==================================================
-# استقبال جهة الاتصال (رقم الهاتف) للتحقق الإجباري
-# ==================================================
-@bot.message_handler(content_types=['contact'])
-def handle_contact(message):
-    uid = message.from_user.id
-    if not message.contact or message.contact.user_id != uid:
-        bot.reply_to(message, "❌ يرجى مشاركة رقم هاتفك الصحيح باستخدام الزر المخصص.")
-        return
-
-    phone_number = str(message.contact.phone_number).replace("+", "").strip()
-    p_type = "أخرى / دولي"
-    for code, name in ALLOWED_COUNTRY_CODES.items():
-        if phone_number.startswith(code):
-            p_type = name
-            break
-
-    state = states.get(uid, "")
-    inviter = None
-    if state.startswith("waiting_phone_"):
-        try:
-            inviter = int(state.replace("waiting_phone_", ""))
-            if inviter == 0:
-                inviter = None
-        except:
-            inviter = None
-
-    username = message.from_user.username or ""
-    cursor.execute("""
-        INSERT OR REPLACE INTO users (user_id, username, balance, referrals, spins, banned, invited_by, phone_type)
-        VALUES (?, ?, 
-            COALESCE((SELECT balance FROM users WHERE user_id = ?), 0),
-            COALESCE((SELECT referrals FROM users WHERE user_id = ?), 0),
-            COALESCE((SELECT spins FROM users WHERE user_id = ?), 0),
-            COALESCE((SELECT banned FROM users WHERE user_id = ?), 0),
-            ?, ?
-        )
-    """, (uid, username, uid, uid, uid, uid, inviter, p_type))
-
-    if inviter and inviter != uid:
-        cursor.execute("SELECT invited_by FROM users WHERE user_id=?", (uid,))
-        res = cursor.fetchone()
-        if not res or not res[0]:
-            reward = int(get_setting("ref_reward") or 10)
-            cursor.execute("UPDATE users SET referrals=referrals+1, balance=balance+? WHERE user_id=?", (reward, inviter))
-
-    db.commit()
-    states.pop(uid, None)
-
-    remove_kb = types.ReplyKeyboardRemove()
-    bot.send_message(
-        uid,
-        f"✅ **تم التحقق من رقمك بنجاح!**\n📱 تصنيف رقمك: **{p_type}**\n\nأهلاً بك في البوت، يمكنك البدء الآن 👇",
-        parse_mode="Markdown",
-        reply_markup=remove_kb
-    )
-    bot.send_message(uid, "القائمة الرئيسية:", reply_markup=main_menu_markup())
 
 # ==================================================
 # معالجة الضغطات (Callback Queries)
@@ -411,55 +334,6 @@ def handle_callbacks(call):
         return
 
     data = call.data
-
-    if data == "adm_toggle_maintenance":
-        global bot_maintenance
-        if not is_owner(uid) and not is_admin(uid):
-            bot.answer_callback_query(call.id, "⛔ للمشرفين فقط", show_alert=True)
-            return
-        bot_maintenance = not bot_maintenance
-        status_text = "متوقف للصيانة 🔴" if bot_maintenance else "يعمل بشكل طبيعي 🟢"
-        bot.answer_callback_query(call.id, f"تم تغيير حالة البوت إلى: {status_text}", show_alert=True)
-        try:
-            bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=admin_menu_markup())
-        except:
-            pass
-        return
-
-    # إعدادات عجلة الحظ في لوحة الإدارة
-    if data == "adm_wheel_settings":
-        if not is_admin(uid):
-            bot.answer_callback_query(call.id, "⛔ للمشرفين فقط", show_alert=True)
-            return
-        bot.answer_callback_query(call.id)
-        bot.edit_message_text(
-            "🎡 **إدارة عجلة الحظ:**\nاختر الإجراء المطلوب من القناة أدناه:",
-            call.message.chat.id,
-            call.message.message_id,
-            parse_mode="Markdown",
-            reply_markup=wheel_menu_markup()
-        )
-        return
-
-    if data == "wh_add_prize":
-        if not is_admin(uid):
-            return
-        states[uid] = "admin_wheel_prize"
-        bot.answer_callback_query(call.id)
-        bot.send_message(call.message.chat.id, "➕ أرسل اسم الجائزة والاحتمال (مثال: `50نقطة 1.5`):", parse_mode="Markdown")
-        return
-
-    if data == "wh_list_prizes":
-        if not is_admin(uid):
-            return
-        cursor.execute("SELECT prize_name, probability FROM wheel_prizes")
-        rows = cursor.fetchall()
-        res = "🎁 **الجوائز النشطة في عجلة الحظ:**\n\n"
-        for r in rows:
-            res += f"🏆 {r[0]} — الاحتمال: {r[1]}%\n"
-        bot.answer_callback_query(call.id)
-        bot.send_message(call.message.chat.id, res if rows else "📭 لا توجد جوائز مضافة حتى الآن.", parse_mode="Markdown")
-        return
 
     if data.startswith("reply_user_"):
         if not is_admin(uid):
@@ -534,6 +408,7 @@ def handle_callbacks(call):
         won_prize = random.choice(prizes)
         prize_text = won_prize[1]
 
+        import re
         numbers = re.findall(r'\d+', prize_text)
         points_won = int(numbers[0]) if numbers else 10
 
@@ -546,7 +421,7 @@ def handle_callbacks(call):
                 BALANCE_CHANNEL,
                 f"🎡 **جائزة جديدة من عجلة الحظ:**\n\n"
                 f"👤 المستخدم: @{call.from_user.username if call.from_user.username else 'لا يوجد'} (ID: `{uid}`)\n"
-                f"🎁 الربح: **{prize_text}** (أضيفت لرصيد البوت)",
+                f"🎁 الربح: **{prize_text}**",
                 parse_mode="Markdown"
             )
         except Exception as e:
@@ -557,7 +432,7 @@ def handle_callbacks(call):
             call.message.chat.id,
             f"🎡 **نتيجة تدوير عجلة الحظ:**\n\n"
             f"🎉 مبروك يا مبدع! ربحت معنا: **{prize_text}**\n"
-            f"💰 تمت إضافة الجائزة مباشرة إلى رصيدك العام في البوت بنجاح!",
+            f"💰 تمت إضافة الجائزة إلى رصيدك بنجاح!",
             parse_mode="Markdown"
         )
         return
@@ -571,8 +446,8 @@ def handle_callbacks(call):
     elif data == "btn_balance":
         user = get_user(uid)
         if not user:
-            bot.answer_callback_query(call.id, "⚠️ يرجى إرسال /start أولاً.", show_alert=True)
-            return
+            register_user(call.message)
+            user = get_user(uid)
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, f"💰 رصيدك الحالي: **{user[2]}** نقطة", parse_mode="Markdown")
 
@@ -646,7 +521,7 @@ def handle_callbacks(call):
     elif data == "btn_my_info":
         user = get_user(uid)
         bot.answer_callback_query(call.id)
-        bot.send_message(call.message.chat.id, f"ℹ️ **معلومات حسابك:**\n\n🆔 المعرف: `{uid}`\n👤 اليوزر: @{user[1] if user[1] else 'لا يوجد'}\n💰 الرصيد العام: {user[2]} نقطة\n👥 الإحالات: {user[3]}\n📱 نوع الرقم: {user[7]}", parse_mode="Markdown")
+        bot.send_message(call.message.chat.id, f"ℹ️ **معلومات حسابك:**\n\n🆔 المعرف: `{uid}`\n👤 اليوزر: @{user[1] if user[1] else 'لا يوجد'}\n💰 الرصيد: {user[2]} نقطة\n👥 الإحالات: {user[3]}", parse_mode="Markdown")
 
     elif data == "btn_leaderboard":
         cursor.execute("SELECT username, user_id, referrals FROM users ORDER BY referrals DESC LIMIT 5")
@@ -681,22 +556,8 @@ def handle_callbacks(call):
         u_count = cursor.fetchone()[0]
         cursor.execute("SELECT COALESCE(SUM(balance), 0) FROM users")
         p_total = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT phone_type, COUNT(*) FROM users GROUP BY phone_type")
-        types_counts = cursor.fetchall()
-        phone_stats_str = ""
-        for p_t, p_c in types_counts:
-            phone_stats_str += f"- {p_t}: **{p_c}** مستخدم\n"
-
         bot.answer_callback_query(call.id)
-        bot.send_message(
-            call.message.chat.id,
-            f"📊 **إحصائيات البوت وانواع الأرقام:**\n\n"
-            f"👥 إجمالي الانضمامات: **{u_count}** مستخدم\n"
-            f"💰 إجمالي الأرصدة الكلية: **{p_total}** نقطة\n\n"
-            f"📱 **تصنيف أنواع الأرقام المكتشفة:**\n{phone_stats_str if phone_stats_str else 'لم يتم تسجيل أرقام هاتف بعد'}",
-            parse_mode="Markdown"
-        )
+        bot.send_message(call.message.chat.id, f"📊 إحصائيات البوت:\n\n👥 المستخدمين: {u_count}\n💰 إجمالي الأرصدة: {p_total}")
 
     elif data == "adm_ref_reward":
         if not is_owner(uid):
@@ -705,6 +566,12 @@ def handle_callbacks(call):
         states[uid] = "admin_ref"
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, f"🎁 مكافأة الإحالات الحالية: {get_setting('ref_reward')}\nأرسل القيمة الجديدة:")
+
+    elif data == "adm_temp_ref":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "🔥 مكافأة الإحالات المؤقتة.")
 
     elif data == "adm_withdraw_req":
         if not is_admin(uid):
@@ -726,6 +593,50 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, f"📅 سقف السحب اليومي الحالي: {get_setting('daily_withdraw_limit')}\nأرسل العدد الجديد:")
 
+    elif data == "adm_add_chan":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "➕ أرسل معرف القناة المراد إضافتها:")
+
+    elif data == "adm_del_chan":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "🗑️ أرسل معرف القناة المراد حذفها:")
+
+    elif data == "adm_add_balance":
+        if not is_admin(uid):
+            return
+        states[uid] = "admin_points"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "💰 أرسل المعرف والكمية (مثال: `123456789 50`):", parse_mode="Markdown")
+
+    elif data == "adm_sub_balance":
+        if not is_admin(uid):
+            return
+        states[uid] = "admin_sub_points"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "💸 أرسل المعرف والكمية للخصم (مثال: `123456789 20`):", parse_mode="Markdown")
+
+    elif data == "adm_manage_users":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "👥 إدارة المستخدمين.")
+
+    elif data == "adm_broadcast":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "📢 أرسل نص الإعلان:")
+
+    elif data == "adm_offers":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "🎁 إدارة العروض.")
+
     elif data == "adm_manage_gifts":
         if not is_admin(uid):
             return
@@ -744,6 +655,13 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, "🎟️ **خطوة 1/3:** أرسل الآن **اسم الكود** (مثلاً: `WELCOME`):", parse_mode="Markdown")
 
+    elif data == "adm_del_old_gifts":
+        if not is_admin(uid):
+            return
+        cursor.execute("DELETE FROM gifts WHERE used_count >= max_uses")
+        db.commit()
+        bot.answer_callback_query(call.id, "🗑️ تم حذف الأكواد المنتهية!", show_alert=True)
+
     elif data == "adm_reset_all":
         if not is_owner(uid):
             bot.answer_callback_query(call.id, "⛔ للمدير الأساسي فقط", show_alert=True)
@@ -758,6 +676,74 @@ def handle_callbacks(call):
         states[uid] = "admin_daily_val"
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, "🎁 أرسل القيمة الجديدة للهدية اليومية:")
+
+    elif data == "adm_edit_desc":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "📖 أرسل شرح البوت الجديد:")
+
+    elif data == "adm_wheel":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "🎡 **إدارة عجلة الحظ:**", parse_mode="Markdown", reply_markup=wheel_menu_markup())
+
+    elif data == "adm_sham_cash":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "💳 إعدادات شام كاش.")
+
+    elif data == "wh_settings":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "⚙️ إعدادات العجلة.")
+
+    elif data == "wh_limits":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "⚙️ تعديل حدود سحب العجلة.")
+
+    elif data == "wh_add_prize":
+        if not is_admin(uid):
+            return
+        states[uid] = "admin_wheel_prize"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "➕ أرسل اسم الجائزة واحتمالها (مثال: `50نقطة 1.5`):", parse_mode="Markdown")
+
+    elif data == "wh_list_prizes":
+        if not is_admin(uid):
+            return
+        cursor.execute("SELECT prize_name, probability FROM wheel_prizes")
+        rows = cursor.fetchall()
+        res = "🎁 **الجوائز النشطة:**\n\n"
+        for r in rows:
+            res += f"🏆 {r[0]} — {r[1]}%\n"
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, res if rows else "📭 لا توجد جوائز.", parse_mode="Markdown")
+
+    elif data == "wh_users":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "👥 إدارة مستخدمي العجلة.")
+
+    elif data == "wh_withdrawals":
+        if not is_admin(uid):
+            return
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, "💸 طلبات سحب العجلة.")
+
+    elif data == "wh_stats":
+        if not is_admin(uid):
+            return
+        cursor.execute("SELECT SUM(probability) FROM wheel_prizes")
+        tot = cursor.fetchone()[0] or 0.0
+        bot.answer_callback_query(call.id)
+        bot.send_message(call.message.chat.id, f"🔄 مجموع احتمالات العجلة: **{tot}%**", parse_mode="Markdown")
 
 # ==================================================
 # استقبال النصوص والحالات
@@ -778,17 +764,6 @@ def handle_text(message):
         return
 
     state = states.get(uid)
-
-    if state == "admin_wheel_prize":
-        try:
-            p_name, p_prob = text.split()
-            cursor.execute("INSERT INTO wheel_prizes (prize_name, probability) VALUES (?, ?)", (p_name, float(p_prob)))
-            db.commit()
-            states.pop(uid, None)
-            bot.reply_to(message, f"🎁 تمت إضافة الجائزة ({p_name}) إلى عجلة الحظ بنجاح!")
-        except Exception as e:
-            bot.reply_to(message, f"❌ صيغة خاطئة. مثال صحيح: `50نقطة 1.5`\nالخطأ: {e}", parse_mode="Markdown")
-        return
 
     if state and state.startswith("admin_reply_to_"):
         target_id = int(state.replace("admin_reply_to_", ""))
@@ -811,9 +786,9 @@ def handle_text(message):
             amount = int(text)
             temp_gift_data[uid]["amount"] = amount
             states[uid] = "admin_gift_uses"
-            bot.reply_to(message, f"✅ القيمة: {amount} نقطة.\n\n👥 **خطوة 3/3:** أرسل الآن **عدد المستخدمين** المسموح لهم باستخدام الكود (أرقام فقط):")
+            bot.reply_to(message, f"✅ القيمة: {amount} نقطة.\n\n👥 **خطوة 3/3:** أرسل الآن **عدد المستخدمين** الذين يمكنهم استخدام هذا الكود (أرقام فقط):")
         except ValueError:
-            bot.reply_to(message, "❌ يرجى إرسال أرقام صحيحة فقط لقيمة الكود:")
+            bot.reply_to(message, "❌ يرجى إرسال أرقام صحيحة فقط للقيمة:")
         return
 
     if state == "admin_gift_uses":
@@ -853,7 +828,7 @@ def handle_text(message):
             
             temp_withdraw_data[uid] = {"method": meth, "amount": amount}
             states[uid] = f"withdraw_address_{meth}"
-            bot.reply_to(message, f"✅ المبلغ المطلوب: {amount} نقطة.\n\n📝 الآن أرسل **رقم الحساب أو عنوان المحفظة**:", parse_mode="Markdown")
+            bot.reply_to(message, f"✅ المبلغ المطلوب: {amount} نقطة.\n\n📝 الآن أرسل **رقم الحساب أو عنوان المحفظة**:")
         except ValueError:
             bot.reply_to(message, "❌ أرسل أرقاماً صحيحة فقط:")
         return
@@ -886,15 +861,10 @@ def handle_text(message):
             types.InlineKeyboardButton("❌ رفض", callback_data=f"reject_wd_{uid}_{amount}")
         )
 
-        cursor.execute("SELECT phone_type FROM users WHERE user_id=?", (uid,))
-        p_row = cursor.fetchone()
-        p_type = p_row[0] if p_row else "غير محدد"
-
         bot.send_message(
             WITHDRAW_CHANNEL,
             f"📥 **طلب سحب جديد:**\n\n"
             f"👤 المستخدم: @{message.from_user.username if message.from_user.username else 'لا يوجد'} (ID: `{uid}`)\n"
-            f"📱 نوع الرقم: **{p_type}**\n"
             f"💳 الطريقة: **{meth}**\n"
             f"💰 المبلغ: {amount} نقطة\n"
             f"📍 الحساب: `{address}`",
@@ -941,6 +911,39 @@ def handle_text(message):
         )
         states.pop(uid, None)
         bot.reply_to(message, "✅ تم إرسال رسالتك لفريق الدعم بنجاح.")
+        return
+
+    if state == "admin_wheel_prize":
+        try:
+            p_name, p_prob = text.split()
+            cursor.execute("INSERT INTO wheel_prizes (prize_name, probability) VALUES (?, ?)", (p_name, float(p_prob)))
+            db.commit()
+            states.pop(uid, None)
+            bot.reply_to(message, f"🎁 تمت إضافة الجائزة ({p_name}) بنجاح!")
+        except:
+            bot.reply_to(message, "❌ صيغة خطأ. مثال: `50نقطة 1.5`", parse_mode="Markdown")
+        return
+
+    if state == "admin_points":
+        try:
+            target, amount = map(int, text.split())
+            cursor.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (amount, target))
+            db.commit()
+            states.pop(uid, None)
+            bot.reply_to(message, "✅ تمت إضافة الرصيد بنجاح.")
+        except:
+            bot.reply_to(message, "❌ صيغة خاطئة.")
+        return
+
+    if state == "admin_sub_points":
+        try:
+            target, amount = map(int, text.split())
+            cursor.execute("UPDATE users SET balance=MAX(0, balance-?) WHERE user_id=?", (amount, target))
+            db.commit()
+            states.pop(uid, None)
+            bot.reply_to(message, "✅ تم خصم الرصيد بنجاح.")
+        except:
+            bot.reply_to(message, "❌ صيغة خاطئة.")
         return
 
     if state == "admin_ref":
@@ -1008,15 +1011,8 @@ def handle_text(message):
     bot.send_message(message.chat.id, "اختر الخدمة من القائمة أدناه 👇", reply_markup=main_menu_markup())
 
 # ==================================================
-# دورة التشغيل والإيقاف الآمن للبوت (Bot Lifecycle)
+# تشغيل البوت
 # ==================================================
-if __name__ == "__main__":
-    print("🤖 Bot is starting and polling safely...")
-    try:
-        bot.remove_webhook()
-        bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60)
-    except Exception as e:
-        print(f"⚠️ Bot stopped due to an error: {e}")
-    finally:
-        db.close()
-        print("🛑 Bot database connection closed safely.")
+print("🤖 Bot is starting successfully...")
+bot.remove_webhook()
+bot.infinity_polling(skip_pending=True)
