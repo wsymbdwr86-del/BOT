@@ -402,7 +402,8 @@ def handle_callbacks(call):
 
         cursor.execute("UPDATE users SET balance=balance+?, spins=spins+1 WHERE user_id=?", (points_won, uid))
         cursor.execute("INSERT OR REPLACE INTO wheel_cooldowns (user_id, last_spin) VALUES (?, ?)", (uid, datetime.now().isoformat()))
-        db.commit()
+        db.commit() bot.send_message(BALANCE_CHANNEL, f"🎡 **جائزة جديدة من عجلة الحظ:**\n\n👤 المستخدم: @{call.from_user.username if call.from_user.username else 'لا يوجد'} (ID: `{uid}`)\n🎁 الربح: **{prize_text}**", parse_mode="Markdown")
+
 
         bot.answer_callback_query(call.id, f"🎁 مبروك! ربحت: {prize_text}", show_alert=True)
         bot.send_message(
