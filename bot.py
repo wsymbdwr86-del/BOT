@@ -1004,9 +1004,20 @@ app = Flask('')
 @app.route('/')
 def home():
     return "Bot is running 24/7!"
+from flask import Flask
+import threading
+import os
+
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running 24/7!"
 
 def run_web():
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
 
 # تشغيل سيرفر الويب بالخلفية
 threading.Thread(target=run_web).start()
+
