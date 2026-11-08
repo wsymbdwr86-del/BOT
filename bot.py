@@ -6,24 +6,37 @@ import threading
 from datetime import date, datetime, timedelta
 import telebot
 from telebot import types
+from flask import Flask
 
 # ==================================================
-# إعدادات البوت والقنوات
+# إعدادات البوت والقنوات (محدثة بالمعرفات الخاصة بك)
 # ==================================================
-TOKEN = os.getenv("BOT_TOKEN", "9084104214:AAHksEyIugwQyL7qXNmoOZstQ-UETf6sRZc")
+TOKEN = "9084104214:AAHksEyIugwQyL7qXNmoOZstQ-UETf6sRZc"
 OWNER_ID = 7110803688
 
 WITHDRAW_CHANNEL = "@dhhdhdhshhshc"
 BALANCE_CHANNEL = "@dhbsbsbsjsjj"
 SUPPORT_CHANNEL = "@dbshhshshzj"
 
-if TOKEN == "YOUR_BOT_TOKEN_HERE":
-    raise RuntimeError("ضع توكن البوت الصحيح في TOKEN أولاً.")
-
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
 db = sqlite3.connect("bot_data.db", check_same_thread=False)
 cursor = db.cursor()
+
+# ==================================================
+# إعداد سيرفر الويب المجاني لـ Render
+# ==================================================
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running 24/7 successfully!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+threading.Thread(target=run_web, daemon=True).start()
 
 # ==================================================
 # قاعدة البيانات
@@ -322,7 +335,6 @@ def handle_callbacks(call):
 
     data = call.data
 
-    # زر الرد على المستخدم من قناة الدعم
     if data.startswith("reply_user_"):
         if not is_admin(uid):
             bot.answer_callback_query(call.id, "⛔ للمشرفين فقط", show_alert=True)
@@ -402,8 +414,18 @@ def handle_callbacks(call):
 
         cursor.execute("UPDATE users SET balance=balance+?, spins=spins+1 WHERE user_id=?", (points_won, uid))
         cursor.execute("INSERT OR REPLACE INTO wheel_cooldowns (user_id, last_spin) VALUES (?, ?)", (uid, datetime.now().isoformat()))
-        db.commit() bot.send_message(BALANCE_CHANNEL, f"🎡 **جائزة جديدة من عجلة الحظ:**\n\n👤 المستخدم: @{call.from_user.username if call.from_user.username else 'لا يوجد'} (ID: `{uid}`)\n🎁 الربح: **{prize_text}**", parse_mode="Markdown")
+        db.commit()
 
+        try:
+            bot.send_message(
+                BALANCE_CHANNEL,
+                f"🎡 **جائزة جديدة من عجلة الحظ:**\n\n"
+                f"👤 المستخدم: @{call.from_user.username if call.from_user.username else 'لا يوجد'} (ID: `{uid}`)\n"
+                f"🎁 الربح: **{prize_text}**",
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"Error sending wheel prize notice: {e}")
 
         bot.answer_callback_query(call.id, f"🎁 مبروك! ربحت: {prize_text}", show_alert=True)
         bot.send_message(
@@ -743,7 +765,6 @@ def handle_text(message):
 
     state = states.get(uid)
 
-    # معالجة رد المشرف على المستخدم عندما يضغط على زر "رد على المستخدم"
     if state and state.startswith("admin_reply_to_"):
         target_id = int(state.replace("admin_reply_to_", ""))
         try:
@@ -876,7 +897,6 @@ def handle_text(message):
             bot.reply_to(message, "❌ أرسل رقماً صحيحاً.")
         return
 
-    # استقبال رسالة الدعم من المستخدم وإرسالها للقناة مع زر الرد التفاعلي
     if state == "user_support":
         kb_sup = types.InlineKeyboardMarkup()
         kb_sup.add(types.InlineKeyboardButton("💬 رد على المستخدم", callback_data=f"reply_user_{uid}"))
@@ -993,31 +1013,6 @@ def handle_text(message):
 # ==================================================
 # تشغيل البوت
 # ==================================================
-print("🤖 Bot is starting successfully with fixed support reply system...")
+print("🤖 Bot is starting successfully...")
 bot.remove_webhook()
 bot.infinity_polling(skip_pending=True)
-from flask import Flask
-import threading
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running 24/7!"
-from flask import Flask
-import threading
-import os
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running 24/7!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
-# تشغيل سيرفر الويب بالخلفية
-threading.Thread(target=run_web).start()
-
