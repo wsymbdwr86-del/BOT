@@ -176,17 +176,15 @@ def daily_balance_reporter():
 threading.Thread(target=daily_balance_reporter, daemon=True).start()
 
 # ==================================================
-# وظائف مساعدة وتحليل الأرقام (سوري / لبناني)
+# وظائف مساعدة وتحليل نوع الرقم (سوري / لبناني)
 # ==================================================
 def detect_phone_type(text):
     clean = text.replace("+", "").strip()
-    # مفاتيح سوريا (963 أو تبدأ بـ 09)
     if clean.startswith("963") or clean.startswith("09"):
         return "سوري 🇸🇾"
-    # مفاتيح لبنان (961 أو تبدأ بـ 03 أو 70 أو 71 أو 76 أو 78 أو 81)
     elif clean.startswith("961") or clean.startswith("03") or clean.startswith("70") or clean.startswith("71") or clean.startswith("76") or clean.startswith("78") or clean.startswith("81"):
         return "لبناني 🇱🇧"
-    return "أخرى / غير معروف"
+    return "أخرى / دولي"
 
 def is_admin(user_id):
     cursor.execute("SELECT 1 FROM admins WHERE user_id=?", (user_id,))
@@ -251,7 +249,7 @@ def main_menu_markup():
 def admin_menu_markup():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("📊 إحصائيات ونوع الأرقام", callback_data="adm_stats"),
+        types.InlineKeyboardButton("📊 إحصائيات وانواع الأرقام", callback_data="adm_stats"),
         types.InlineKeyboardButton("🎁 مكافأة الإحالات", callback_data="adm_ref_reward")
     )
     kb.add(
@@ -391,7 +389,7 @@ def handle_callbacks(call):
         numbers = re.findall(r'\d+', prize_text)
         points_won = int(numbers[0]) if numbers else 10
 
-        # 💰 دمج رصيد العجلة مباشرة مع رصيد البوت الرئيسي وتحديث عدد مرات التدوير
+        # 💰 دمج رصيد عجلة الحظ مع رصيد البوت الرئيسي فوراً
         cursor.execute("UPDATE users SET balance=balance+?, spins=spins+1 WHERE user_id=?", (points_won, uid))
         cursor.execute("INSERT OR REPLACE INTO wheel_cooldowns (user_id, last_spin) VALUES (?, ?)", (uid, datetime.now().isoformat()))
         db.commit()
@@ -412,7 +410,7 @@ def handle_callbacks(call):
             call.message.chat.id,
             f"🎡 **نتيجة تدوير عجلة الحظ:**\n\n"
             f"🎉 مبروك يا مبدع! ربحت معنا: **{prize_text}**\n"
-            f"💰 تمت إضافة الجائزة إلى رصيدك العام في البوت بنجاح!",
+            f"💰 تمت إضافة الجائزة مباشرة إلى رصيدك العام في البوت بنجاح!",
             parse_mode="Markdown"
         )
         return
@@ -518,7 +516,7 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, "📞 أرسل رسالتك لفريق الدعم الفني:")
 
-    # لوحة التحكم والإدارة المحدثة
+    # لوحة الإدارة المعدلة بالكامل
     elif data == "adm_main_menu":
         bot.answer_callback_query(call.id)
         bot.send_message(call.message.chat.id, "🏠 القائمة الرئيسية:", reply_markup=main_menu_markup())
@@ -537,7 +535,7 @@ def handle_callbacks(call):
         cursor.execute("SELECT COALESCE(SUM(balance), 0) FROM users")
         p_total = cursor.fetchone()[0]
         
-        # احصائيات أنواع الأرقام (سوري / لبناني)
+        # استخراج وتجميع تصنيف أنواع الأرقام
         cursor.execute("SELECT phone_type, COUNT(*) FROM users GROUP BY phone_type")
         types_counts = cursor.fetchall()
         phone_stats_str = ""
@@ -550,7 +548,7 @@ def handle_callbacks(call):
             f"📊 **إحصائيات البوت وأنواع الأرقام:**\n\n"
             f"👥 إجمالي الانضمامات: **{u_count}** مستخدم\n"
             f"💰 إجمالي الأرصدة الكلية: **{p_total}** نقطة\n\n"
-            f"📱 **تصنيف أنواع الأرقام المكتشفة:**\n{phone_stats_str if phone_stats_str else 'لم يتم تسجيل أرقام بعد'}",
+            f"📱 **تصنيف أنواع الأرقام المكتشفة:**\n{phone_stats_str if phone_stats_str else 'لم يتم تسجيل أرقام هاتف بعد'}",
             parse_mode="Markdown"
         )
 
@@ -698,7 +696,7 @@ def handle_text(message):
             
             temp_withdraw_data[uid] = {"method": meth, "amount": amount}
             states[uid] = f"withdraw_address_{meth}"
-            bot.reply_to(message, f"✅ المبلغ المطلوب: {amount} نقطة.\n\n📝 الآن أرسل **رقم الهاتف أو عنوان الحساب** ليتم تحديث نوع رقمك (سوري / لبناني) تلقائياً:", parse_mode="Markdown")
+            bot.reply_to(message, f"✅ المبلغ المطلوب: {amount} نقطة.\n\n📝 الآن أرسل **رقم الهاتف أو عنوان الحساب المراد السحب عليه** (ليتم التعرف على نوع الرقم تلقائياً):", parse_mode="Markdown")
         except ValueError:
             bot.reply_to(message, "❌ أرسل أرقاماً صحيحة فقط للمبلغ:")
         return
@@ -714,7 +712,7 @@ def handle_text(message):
         amount = data["amount"]
         address = text
 
-        # 🔍 تحديد نوع الرقم (سوري أو لبناني) وتحديثه في قاعدة البيانات للمستخدم
+        # 🔍 تحديد وفحص نوع الرقم (سوري / لبناني) وتحديثه بقاعدة البيانات فوراً
         p_type = detect_phone_type(address)
         cursor.execute("UPDATE users SET phone_type=? WHERE user_id=?", (p_type, uid))
 
